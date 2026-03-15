@@ -1,24 +1,29 @@
-import logo from './logo.svg';
-import './App.css';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Dashboard from './pages/Dashboard';
+import Workspace from './pages/Workspace';
+import Upload from './pages/Upload';
+import Graph from './pages/Graph';
+import Extensions from './pages/Extensions';
+import Converter from './pages/Converter';
+import Analysis from './pages/Analysis';
+import Voice from './pages/Voice';
+import './index.css';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/workspace" element={<Workspace />} />
+        <Route path="/upload" element={<Upload />} />
+        <Route path="/graph" element={<Graph />} />
+        <Route path="/extensions" element={<Extensions />} />
+        <Route path="/converter" element={<Converter />} />
+        <Route path="/analysis" element={<Analysis />} />
+        <Route path="/voice" element={<Voice />} />
+      </Routes>
+    </Router>
   );
 }
 
