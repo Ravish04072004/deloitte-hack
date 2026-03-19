@@ -1,9 +1,25 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as d3 from 'd3';
+import { GRAPH_EDGES, GRAPH_NODES } from '../data/demoData';
 
 const Graph = () => {
   const d3Container = useRef(null);
+    const [selectedNode, setSelectedNode] = useState(null);
+    const [visibleGroups, setVisibleGroups] = useState({
+        current: true,
+        doc: true,
+        precedent: true,
+        section: true,
+        related: true,
+    });
+
+    const filteredGraph = useMemo(() => {
+        const nodes = GRAPH_NODES.filter((node) => visibleGroups[node.group]);
+        const visibleIds = new Set(nodes.map((node) => node.id));
+        const edges = GRAPH_EDGES.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+        return { nodes, edges };
+    }, [visibleGroups]);
 
   useEffect(() => {
     if (d3Container.current) {
@@ -11,68 +27,28 @@ const Graph = () => {
         const targetSvg = d3.select(d3Container.current);
         targetSvg.selectAll("*").remove();
 
-        // Simple resize tracking
         let width = targetSvg.node().getBoundingClientRect().width || 800;
         let height = targetSvg.node().getBoundingClientRect().height || 500;
 
-        // Generate dummy data based on the legal app
-        const nodes = [
-            { id: "State vs Sharma", group: 1, radius: 12 },
-            { id: "2024-07-11", group: 2, radius: 7 },
-            { id: "Delhi HC 2023", group: 2, radius: 7 },
-            { id: "1998 SC 112", group: 2, radius: 7 },
-            { id: "IPC 420", group: 3, radius: 7 },
-            { id: "BNS 316", group: 3, radius: 7 },
-            { id: "Evidence Act 65B", group: 3, radius: 7 },
-            { id: "#cyberlaw", group: 4, radius: 6 },
-            { id: "#fraud", group: 4, radius: 6 },
-            { id: "R.K. Dispute", group: 1, radius: 10 },
-            { id: "Tax Appeal", group: 1, radius: 10 },
-            { id: "2024-06-26", group: 2, radius: 7 }
-        ];
+                const nodes = filteredGraph.nodes.map((node) => ({
+                    ...node,
+                    radius: node.group === 'current' ? 18 : node.group === 'doc' ? 10 : node.group === 'related' ? 8 : 11,
+                }));
+                const links = filteredGraph.edges.map((edge) => ({ ...edge }));
 
-        const links = [
-            { source: "State vs Sharma", target: "2024-07-11" },
-            { source: "State vs Sharma", target: "Delhi HC 2023" },
-            { source: "State vs Sharma", target: "IPC 420" },
-            { source: "IPC 420", target: "BNS 316" },
-            { source: "State vs Sharma", target: "Evidence Act 65B" },
-            { source: "State vs Sharma", target: "#cyberlaw" },
-            { source: "State vs Sharma", target: "#fraud" },
-            { source: "R.K. Dispute", target: "IPC 420" },
-            { source: "R.K. Dispute", target: "1998 SC 112" },
-            { source: "Tax Appeal", target: "2024-07-11" },
-            { source: "Tax Appeal", target: "#fraud" },
-            { source: "Delhi HC 2023", target: "#cyberlaw" },
-            { source: "1998 SC 112", target: "Evidence Act 65B" },
-            { source: "State vs Sharma", target: "2024-06-26" },
-            { source: "R.K. Dispute", target: "2024-06-26" }
-        ];
-
-        // Map groups to theme colors
-        const color = d3.scaleOrdinal()
-            .domain([1, 2, 3, 4])
-            .range(["#3b82f6", "#10b981", "#ef4444", "#a855f7"]); 
+                const colorByGroup = {
+                    current: '#f59e0b',
+                    doc: '#60a5fa',
+                    regulation: '#60a5fa',
+                    precedent: '#22c55e',
+                    section: '#fb923c',
+                    related: '#a78bfa',
+                };
 
         const simulation = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links).id(d => d.id).distance(120))
             .force("charge", d3.forceManyBody().strength(-300))
             .force("center", d3.forceCenter(width / 2, height / 2));
-
-        // Setup arrowhead defs
-        targetSvg.append("defs").append("marker")
-            .attr("id", "arrowhead")
-            .attr("viewBox", "-0 -5 10 10")
-            .attr("refX", 22)
-            .attr("refY", 0)
-            .attr("orient", "auto")
-            .attr("markerWidth", 6)
-            .attr("markerHeight", 6)
-            .attr("xoverflow", "visible")
-            .append("svg:path")
-            .attr("d", "M 0,-5 L 10 ,0 L 0,5")
-            .attr("fill", "#666")
-            .style("stroke","none");
 
         const g = targetSvg.append("g");
 
@@ -81,15 +57,19 @@ const Graph = () => {
             g.attr("transform", e.transform);
         }));
 
-        // Draw links
         const link = g.append("g")
-            .attr("stroke", "#555")
             .attr("stroke-opacity", 0.8)
             .selectAll("line")
             .data(links)
             .join("line")
-            .attr("stroke-width", 1)
-            .attr("marker-end", "url(#arrowhead)");
+            .attr("stroke-width", 1.5)
+            .attr('stroke', (d) => {
+                if (d.label === 'relies on') return '#22c55e';
+                if (d.label === 'distinguishes') return '#ef4444';
+                if (d.label === 'cites') return '#9ca3af';
+                return '#4b5563';
+            })
+            .attr('stroke-dasharray', (d) => (d.label === 'distinguishes' ? '5 4' : null));
 
         // Draw node groups
         const nodeGroup = g.append("g")
@@ -101,14 +81,18 @@ const Graph = () => {
                 .on("drag", dragged)
                 .on("end", dragended));
 
-        // Draw circles
-        nodeGroup.append("circle")
+        const circles = nodeGroup.append("circle")
             .attr("r", d => d.radius)
-            .attr("fill", d => color(d.group))
+            .attr("fill", d => colorByGroup[d.group] || '#a1a1aa')
             .attr("stroke", "#0a0a0a")
-            .attr("stroke-width", 1.5);
+            .attr("stroke-width", 1.5)
+            .on('click', (_, d) => setSelectedNode(d));
 
-        // Draw texts
+        circles
+            .filter((d) => d.group === 'current')
+            .attr('stroke', '#fcd34d')
+            .attr('stroke-width', 2.5);
+
         nodeGroup.append("text")
             .attr("x", 14)
             .attr("y", "0.31em")
@@ -118,7 +102,6 @@ const Graph = () => {
             .style("font-family", "sans-serif")
             .style("pointer-events", "none");
 
-        // Simulation tick update
         simulation.on("tick", () => {
             link
                 .attr("x1", d => d.source.x)
@@ -129,7 +112,6 @@ const Graph = () => {
             nodeGroup.attr("transform", d => `translate(${d.x},${d.y})`);
         });
 
-        // Drag interactions
         function dragstarted(event) {
             if (!event.active) simulation.alphaTarget(0.3).restart();
             event.subject.fx = event.subject.x;
@@ -145,7 +127,6 @@ const Graph = () => {
             event.subject.fy = null;
         }
         
-        // Handle resizing
         const handleResize = () => {
             if (!targetSvg.node()) return;
             width = targetSvg.node().getBoundingClientRect().width;
@@ -161,7 +142,11 @@ const Graph = () => {
             simulation.stop();
         };
     }
-  }, []);
+    }, [filteredGraph]);
+
+    const toggleGroup = (group) => {
+        setVisibleGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+    };
 
   return (
     <div style={{ background: 'var(--bg-color)', minHeight: '100vh', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
@@ -174,10 +159,11 @@ const Graph = () => {
         }
 
         .filter-sidebar {
-            background: var(--surface-color);
+            background: var(--glass-surface);
             padding: 1.5rem;
-            border-right: 1px solid var(--border-color);
+            border-right: 1px solid var(--glass-border);
             overflow-y: auto;
+            backdrop-filter: blur(12px);
         }
 
         .filter-group {
@@ -198,31 +184,34 @@ const Graph = () => {
         }
 
         .graph-area {
-            background: #1e1e1e; /* Dark theme suitable for Obsidian style graphs */
+            background: rgba(30, 30, 30, 0.72);
             position: relative;
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
+            border-left: 1px solid var(--glass-border);
         }
 
         .graph-overlay {
             position: absolute;
             top: 20px;
             right: 20px;
-            background: rgba(10, 10, 10, 0.9);
+            background: rgba(10, 10, 10, 0.55);
             padding: 1rem;
-            border-radius: 8px;
+            border-radius: 10px;
             pointer-events: none;
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--glass-border);
             color: white;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--glass-shadow);
         }
       `}</style>
 
-      <nav className="top-nav" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-color)' }}>
-          <div className="logo"><Link to="/workspace" style={{ textDecoration: 'none', color: 'inherit' }}>⬅️ Back to Workspace</Link> | Knowledge Graph</div>
+      <nav className="top-nav" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-elevated)' }}>
+          <div className="logo"><Link to="/workspace" style={{ textDecoration: 'none', color: 'inherit' }}>⬅️ Back to Workspace</Link> | Case Knowledge Graph · Sharma v. HDFC Bank · {filteredGraph.nodes.length} nodes · {filteredGraph.edges.length} edges</div>
           <div className="nav-actions">
-              <input type="text" placeholder="Highlight Nodes..." style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #333', background: 'var(--bg-color)', color: 'var(--text-primary)' }} />
+              <input type="text" placeholder="Highlight Nodes..." style={{ padding: '0.45rem 0.6rem', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.2)', color: 'var(--text-primary)', backdropFilter: 'blur(8px)' }} />
           </div>
       </nav>
 
@@ -232,36 +221,51 @@ const Graph = () => {
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2rem' }}>Isolate legal patterns</p>
 
               <div className="filter-group">
-                  <h4>Legal Domain</h4>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Criminal Law (Red)</label>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Civil Law (Blue)</label>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Constitutional (Green)</label>
-              </div>
-
-              <div className="filter-group">
                   <h4>Node Types</h4>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Case Files</label>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Judgments</label>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Legal Sections</label>
-                  <label className="filter-label"><input type="checkbox" defaultChecked /> Precedents</label>
+                  <label className="filter-label"><input type="checkbox" checked={visibleGroups.current} onChange={() => toggleGroup('current')} /> Current Case</label>
+                  <label className="filter-label"><input type="checkbox" checked={visibleGroups.doc} onChange={() => toggleGroup('doc')} /> Documents</label>
+                  <label className="filter-label"><input type="checkbox" checked={visibleGroups.precedent} onChange={() => toggleGroup('precedent')} /> Precedents</label>
+                  <label className="filter-label"><input type="checkbox" checked={visibleGroups.section} onChange={() => toggleGroup('section')} /> Sections</label>
+                  <label className="filter-label"><input type="checkbox" checked={visibleGroups.related} onChange={() => toggleGroup('related')} /> Related Cases</label>
               </div>
 
               <div className="filter-group">
-                  <h4>Timeline</h4>
-                  <input type="range" min="1950" max="2024" defaultValue="2024" style={{ width: '100%' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                      <span>1950</span><span>2024</span>
-                  </div>
+                  <h4>Court/Year</h4>
+                  <label className="filter-label"><input type="checkbox" defaultChecked /> Delhi HC</label>
+                  <label className="filter-label"><input type="checkbox" defaultChecked /> Kerala HC</label>
+                  <label className="filter-label"><input type="checkbox" defaultChecked /> 2015-2024</label>
               </div>
           </aside>
 
-          <main className="graph-area" style={{ background: '#171717', position: 'relative' }}>
+          <main className="graph-area" style={{ background: 'rgba(23, 23, 23, 0.78)', position: 'relative' }}>
               <svg ref={d3Container} id="force-graph" style={{ width: '100%', height: '100%', display: 'block' }}></svg>
+
+              <div className="graph-legend">
+                <strong style={{ display: 'block', marginBottom: '0.4rem' }}>Legend</strong>
+                <div>🟡 Current Case</div>
+                <div>🔵 Documents</div>
+                <div>🟢 Precedents</div>
+                <div>🟠 Sections</div>
+                <div>🟣 Related Cases</div>
+              </div>
 
               <div className="graph-overlay">
                   <strong>Interactive Graph</strong>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Drag nodes to interact. Scroll to zoom inside graph.</p>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Drag nodes to interact. Scroll to zoom inside graph. Click nodes to inspect.</p>
               </div>
+
+              {selectedNode && (
+                <div style={{ position: 'absolute', left: '20px', top: '20px', maxWidth: '300px', background: 'rgba(10,10,10,0.75)', border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '0.8rem', backdropFilter: 'blur(8px)' }}>
+                  <strong>{selectedNode.label}</strong>
+                  <p style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    {selectedNode.group === 'precedent' && 'Precedent · Court-level reference · Outcome context available'}
+                    {selectedNode.group === 'section' && 'Legal Section · Statutory interpretation and applicability'}
+                    {selectedNode.group === 'doc' && 'Document Node · Extracted from current case workspace'}
+                    {selectedNode.group === 'current' && 'Primary case node for the live demo storyline'}
+                    {selectedNode.group === 'related' && 'Related matter with overlapping legal issues'}
+                  </p>
+                </div>
+              )}
           </main>
       </div>
     </div>

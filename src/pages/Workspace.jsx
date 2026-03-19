@@ -1,28 +1,89 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { CASE_DOCUMENTS, DEMO_CASE, WORKSPACE_CHAT } from '../data/demoData';
 
 const Workspace = () => {
     const navigate = useNavigate();
+    const [activeDoc, setActiveDoc] = useState(CASE_DOCUMENTS[0]?.id || null);
+    const [showTyping, setShowTyping] = useState(false);
+
+    useEffect(() => {
+        setShowTyping(true);
+        const timer = setTimeout(() => setShowTyping(false), 2000);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const groupedDocs = useMemo(() => {
+        return CASE_DOCUMENTS.reduce((acc, doc) => {
+            if (!acc[doc.type]) {
+                acc[doc.type] = [];
+            }
+            acc[doc.type].push(doc);
+            return acc;
+        }, {});
+    }, []);
+
+    const markdownToHtml = (text) => {
+        let html = text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/\n\n/g, '<br/><br/>')
+            .replace(/\n- (.*?)(?=<br\/>|$)/g, '<li>$1</li>')
+            .replace(/(^|<br\/>)\d+\. (.*?)(?=<br\/>|$)/g, '$1<li>$2</li>');
+
+        html = html.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>');
+
+        if (html.includes('|')) {
+            const lines = text.split('\n').filter((line) => line.trim().startsWith('|'));
+            if (lines.length > 2) {
+                const rows = lines.filter((line, index) => index !== 1).map((line) =>
+                    line
+                        .split('|')
+                        .filter(Boolean)
+                        .map((cell) => cell.trim())
+                );
+                if (rows.length > 1) {
+                    const head = rows[0].map((cell) => `<th>${cell}</th>`).join('');
+                    const body = rows
+                        .slice(1)
+                        .map((cells) => `<tr>${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`)
+                        .join('');
+                    const table = `<table style="width:100%;margin-top:0.7rem;border-collapse:collapse"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+                    html += table;
+                }
+            }
+        }
+
+        return html;
+    };
 
     return (
-        <div style={{ background: 'var(--bg-color)', color: 'var(--text-primary)', height: '100vh', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--bg-color)', color: 'var(--text-primary)', minHeight: '100vh', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <style>{`
                 .workspace-grid {
                     display: grid;
                     grid-template-columns: 20% 50% 30%;
-                    height: calc(100vh - 65px);
+                    height: 100%;
+                    gap: 1rem;
+                    padding: 1rem;
+                    min-height: 0;
                 }
                 
                 .chat-area {
                     display: flex;
                     flex-direction: column;
                     justify-content: space-between;
-                    background: var(--bg-color);
-                    border-right: 1px solid var(--border-color);
+                    min-height: 0;
+                    background: var(--glass-surface);
+                    border: 1px solid var(--glass-border);
+                    border-radius: 14px;
+                    backdrop-filter: blur(14px);
+                    box-shadow: var(--glass-shadow);
                 }
 
                 .chat-history {
                     flex-grow: 1;
+                    min-height: 0;
                     padding: 2rem;
                     overflow-y: auto;
                     color: var(--text-primary);
@@ -30,8 +91,9 @@ const Workspace = () => {
 
                 .chat-input {
                     padding: 1.5rem;
-                    border-top: 1px solid var(--border-color);
-                    background: var(--bg-color);
+                    border-top: 1px solid var(--glass-border);
+                    background: rgba(0, 0, 0, 0.18);
+                    border-radius: 0 0 14px 14px;
                 }
 
                 .msg-user {
@@ -46,13 +108,14 @@ const Workspace = () => {
                 }
 
                 .msg-ai {
-                    background: var(--surface-color);
+                    background: rgba(23, 23, 23, 0.72);
                     color: var(--text-primary);
                     padding: 1rem;
                     border-radius: 8px 8px 8px 0;
                     margin-bottom: 1rem;
                     max-width: 80%;
-                    border: 1px solid var(--border-color);
+                    border: 1px solid var(--glass-border);
+                    backdrop-filter: blur(10px);
                 }
 
                 .file-tree ul {
@@ -80,80 +143,104 @@ const Workspace = () => {
 
                 .chip {
                     padding: 0.2rem 0.5rem;
-                    background: var(--surface-color);
-                    border: 1px solid var(--border-color);
+                    background: rgba(255, 255, 255, 0.04);
+                    border: 1px solid var(--glass-border);
                     border-radius: 12px;
                     font-size: 0.75rem;
                     cursor: pointer;
                     color: var(--text-secondary);
+                    transition: all 0.2s;
                 }
                 .chip:hover {
-                    background: var(--border-color);
+                    background: rgba(255, 255, 255, 0.09);
+                    transform: translateY(-1px);
                 }
             `}</style>
 
             <nav className="top-nav">
-                <div className="logo"><Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>⬅️ Back to Home</Link> | Case: State vs. Sharma</div>
+                <div className="logo"><Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>⬅️ Back to Home</Link> | {DEMO_CASE.title} - {DEMO_CASE.number}</div>
                 <div className="nav-actions">
-                    <span style={{ background: 'var(--civ-blue)', padding: '5px 10px', borderRadius: '20px', color: 'white', fontSize: '0.8em' }}>Extension: Cyber Law Active</span>
+                    <span style={{ background: 'var(--civ-blue)', padding: '5px 10px', borderRadius: '20px', color: 'white', fontSize: '0.8em' }}>{DEMO_CASE.court}</span>
+                    <span style={{ background: 'rgba(245,158,11,0.18)', color: '#f59e0b', padding: '5px 10px', borderRadius: '20px', fontSize: '0.8em', border: '1px solid #f59e0b' }}>{DEMO_CASE.status}</span>
                 </div>
             </nav>
 
+            <div style={{ flex: 1, minHeight: 0 }}>
             <div className="workspace-grid">
                 {/* Left Sidebar: Document Tree */}
-                <aside className="sidebar file-tree" style={{ background: 'var(--sidebar-bg)' }}>
+                <aside className="sidebar file-tree" style={{ background: 'var(--glass-surface)', border: '1px solid var(--glass-border)', borderRadius: '14px', boxShadow: 'var(--glass-shadow)' }}>
                     <h3 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>📁 Case Documents</h3>
-                    <ul>
-                        <li>📄 Petition Filed.pdf</li>
-                        <li>📄 Respondent Reply.docx</li>
-                        <li>📄 Evidence Documents.pdf</li>
-                        <li>📄 Court Orders.pdf</li>
-                    </ul>
-
-                    <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>📁 Related Judgments</h3>
-                    <ul>
-                        <li>📜 Judgment A (Summary)</li>
-                        <li>📜 Judgment B (Summary)</li>
-                    </ul>
-
-                    <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>📁 Precedents</h3>
-                    <ul>
-                        <li>🏛️ Landmark Case 1</li>
-                        <li>🏛️ Landmark Case 2</li>
-                    </ul>
-
-                    <h3 style={{ fontSize: '1rem', marginTop: '1.5rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>📁 Legal Sections</h3>
-                    <ul>
-                        <li>⚖️ IPC 420 → BNS 316</li>
-                        <li>⚖️ CrPC 482</li>
-                    </ul>
+                    {Object.entries(groupedDocs).map(([type, docs]) => (
+                        <div key={type} style={{ marginBottom: '0.8rem' }}>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.35rem' }}>{type}</p>
+                            <ul>
+                                {docs.map((doc) => (
+                                    <li
+                                        key={doc.id}
+                                        onClick={() => setActiveDoc(doc.id)}
+                                        style={{
+                                            color: activeDoc === doc.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            background: activeDoc === doc.id ? 'rgba(168,85,247,0.2)' : 'transparent',
+                                            borderRadius: '8px',
+                                            padding: '0.35rem 0.5rem',
+                                        }}
+                                    >
+                                        📄 {doc.name}
+                                        {doc.autoFetched && (
+                                            <span style={{ marginLeft: '0.45rem', fontSize: '0.68rem', background: 'rgba(245,158,11,0.25)', color: '#fbbf24', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+                                                ⚡ Auto-fetched
+                                            </span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
                 </aside>
 
                 {/* Center: Chat Interface */}
                 <main className="chat-area">
                     <div className="chat-history">
-                        <div className="msg-user">
-                            What are the key arguments in the respondent's reply regarding the intellectual property claim?
-                        </div>
-                        <div className="msg-ai">
-                            Based on the uploaded document "Respondent Reply.docx", the key arguments are:
-                            <ol style={{ marginTop: '0.5rem', marginLeft: '1.5rem', marginBottom: '1rem' }}>
-                                <li style={{ marginBottom: '0.5rem' }}>The patent claims were already disclosed in prior art. <span style={{color: 'var(--primary-color)', fontSize: '0.85em'}}>[Pg-4]</span></li>
-                                <li style={{ marginBottom: '0.5rem' }}>The petitioner failed to demonstrate actual financial damages. <span style={{color: 'var(--primary-color)', fontSize: '0.85em'}}>[Pg-12]</span></li>
-                            </ol>
-                            Would you like me to find similar precedents related to public domain patent invalidation?
-                        </div>
+                        {WORKSPACE_CHAT.map((message, idx) => (
+                            <div key={`${message.time}-${idx}`} className={message.role === 'ai' ? 'msg-ai chat-ai-message' : 'msg-user chat-user-message'}>
+                                {message.role === 'ai' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                                        <span style={{ width: '28px', height: '28px', borderRadius: '999px', background: 'radial-gradient(circle at 30% 30%, #60a5fa, #a855f7)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, boxShadow: '0 0 14px rgba(96,165,250,0.45)' }}>AI</span>
+                                        <strong>LegalMind AI</strong>
+                                        {message.extensionActive && <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(168,85,247,0.25)', color: '#d8b4fe', borderRadius: '999px', padding: '0.2rem 0.45rem' }}>{message.extensionActive} Active</span>}
+                                    </div>
+                                )}
+                                {message.role === 'ai' ? (
+                                    <div dangerouslySetInnerHTML={{ __html: markdownToHtml(message.text) }} />
+                                ) : (
+                                    <p style={{ margin: 0 }}>{message.text}</p>
+                                )}
+                                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{message.time}</div>
+                                {message.citations && (
+                                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+                                        {message.citations.map((citation) => (
+                                            <span key={citation} className="citation-chip">{citation}</span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {showTyping && (
+                            <div className="typing-indicator" style={{ width: '90px', marginBottom: '1rem' }}>
+                                <span></span><span></span><span></span>
+                            </div>
+                        )}
                     </div>
                     
-                    <div className="chat-input" style={{ background: 'var(--bg-color)' }}>
+                    <div className="chat-input" style={{ background: 'rgba(0,0,0,0.16)' }}>
                         <div className="chat-toolbar">
                             <span className="chip" onClick={() => navigate('/analysis')}>Summarize Judgment</span>
                             <span className="chip">Find Precedents</span>
                             <span className="chip">Compare Arguments</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '1rem', border: '1px solid var(--border-color)', padding: '0.5rem', borderRadius: '8px', background: 'var(--surface-color)' }}>
+                        <div style={{ display: 'flex', gap: '1rem', border: '1px solid var(--glass-border)', padding: '0.5rem', borderRadius: '10px', background: 'rgba(23,23,23,0.76)', backdropFilter: 'blur(10px)' }}>
                             <button className="action-btn" style={{ padding: '0.2rem', color: 'var(--text-secondary)' }}><i className="fa-solid fa-paperclip"></i></button>
-                            <input type="text" placeholder="Ask anything about this case..." style={{ flexGrow: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)' }} />
+                            <input type="text" defaultValue="What is the strongest counter-argument HDFC Bank will likely raise?" style={{ flexGrow: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)' }} />
                             <button className="action-btn" style={{ padding: '0.2rem', color: 'var(--text-secondary)' }}><i className="fa-solid fa-microphone"></i></button>
                             <button className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '6px' }}>Send</button>
                         </div>
@@ -161,18 +248,38 @@ const Workspace = () => {
                 </main>
 
                 {/* Right Sidebar: Local Graph */}
-                <aside className="sidebar" style={{ borderLeft: '1px solid var(--border-color)', background: 'var(--sidebar-bg)', padding: '1rem' }}>
-                    <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🧠 Case Connections</h3>
-                    <p style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>Graph view of entities in State vs. Sharma</p>
-                    
-                    <div className="graph-preview" style={{ height: '250px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>[Local Force-Directed Map]</span>
+                <aside className="sidebar" style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-surface)', padding: '1rem', borderRadius: '14px', boxShadow: 'var(--glass-shadow)' }}>
+                    <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Case Intelligence</h3>
+                    <p style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginBottom: '0.8rem' }}>{DEMO_CASE.title}</p>
+
+                    <div className="case-card" style={{ marginBottom: '0.8rem' }}>
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Active Extensions</p>
+                        <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Cyber Law Assistant</span>
+                            <span style={{ color: '#22c55e' }}>ON</span>
+                        </div>
+                        <div style={{ marginTop: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Google Calendar</span>
+                            <span style={{ color: '#22c55e' }}>ON</span>
+                        </div>
                     </div>
-                    
-                    <button className="btn" style={{ width: '100%', marginTop: '1rem', background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => navigate('/graph')}>View Full Graph</button>
-                    <button className="btn" style={{ width: '100%', marginTop: '1rem', background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => navigate('/analysis')}>Run Judgment Analysis</button>
-                    <button className="btn" style={{ width: '100%', marginTop: '1rem', background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} onClick={() => navigate('/converter')}>Open IPC/BNS Converter</button>
+
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.45rem' }}>Related Cases</p>
+                    <div className="case-card" style={{ marginBottom: '0.55rem' }}>
+                        <strong>Verma v. PNB (2023)</strong>
+                        <div style={{ marginTop: '0.35rem', color: '#60a5fa', fontSize: '0.8rem' }}>Similarity 82%</div>
+                    </div>
+                    <div className="case-card" style={{ marginBottom: '0.8rem' }}>
+                        <strong>Umashankar v. ICICI</strong>
+                        <div style={{ marginTop: '0.35rem', color: '#60a5fa', fontSize: '0.8rem' }}>Similarity 79%</div>
+                    </div>
+
+                    <button className="btn" style={{ width: '100%', marginTop: '0.4rem' }}>Generate Hearing Brief</button>
+                    <button className="btn" style={{ width: '100%', marginTop: '0.5rem' }}>Export as PDF</button>
+                    <button className="btn" style={{ width: '100%', marginTop: '0.5rem' }} onClick={() => navigate('/graph')}>Add to Knowledge Graph</button>
+                    <button className="btn" style={{ width: '100%', marginTop: '0.5rem' }} onClick={() => navigate('/voice')}>Voice Dictate Note</button>
                 </aside>
+            </div>
             </div>
         </div>
     );
